@@ -3,7 +3,6 @@ name: Build LarpCraft APK
 on:
   workflow_dispatch:
   push:
-    branches: [main]
 
 jobs:
   build:
@@ -20,12 +19,43 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install dependencies
-        run: npm install
+      - name: Find game files
+        run: |
+          if [ ! -f www/index.html ]; then
+            for z in $(find . -maxdepth 2 -iname '*.zip'); do
+              rm -rf _x && mkdir _x
+              unzip -q -o "$z" -d _x || continue
+              IDX=$(find _x -name index.html | head -n1)
+              if [ -n "$IDX" ]; then
+                mkdir -p www
+                cp -r "$(dirname "$IDX")"/. www/
+                break
+              fi
+            done
+          fi
+          if [ ! -f www/index.html ]; then
+            echo "CHYBA: nenasiel som hru. Nahraj priecinok www/ (index.html + three.min.js) alebo ZIP s hrou do repozitara."
+            exit 1
+          fi
+          ls -la www
+
+      - name: Setup Capacitor
+        run: |
+          [ -f package.json ] || npm init -y
+          npm install @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6
+          cat > capacitor.config.json <<'EOF'
+          {
+            "appId": "com.larpcraft.game",
+            "appName": "LarpCraft",
+            "webDir": "www",
+            "server": { "androidScheme": "http", "cleartext": true },
+            "android": { "allowMixedContent": true }
+          }
+          EOF
 
       - name: Build Android app
         run: |
-          npx cap add android
+          [ -d android ] || npx cap add android
           npx cap sync android
           cd android
           chmod +x gradlew
